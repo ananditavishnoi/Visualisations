@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>loss of brain</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #020204;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    cursor: none;
+  }
+  #label {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.12);
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: lowercase;
+    pointer-events: none;
+    user-select: none;
+  }
+  #hint {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.10);
+    font-family: 'Courier New', monospace;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: lowercase;
+    pointer-events: none;
+    user-select: none;
+    transition: opacity 1.5s;
+  }
+</style>
+</head>
+<body>
+<div id="label">loss of brain</div>
+<div id="hint">hold to breathe</div>
+<script>
+new p5(function(p) {
+
+  // ── PET palettes ──────────────────────────────────────────
+  const PET_HOT = [
+    [8,   15,  90],  [0,   55,  200], [0,  130, 230],
+    [0,   210, 210], [0,   200,  70], [100,220,   0],
+    [230, 230,   0], [255, 150,   0], [255, 60,   0],
+    [230,  10,  10],
+  ];
+  const PET_CALM = [
+    [2,   5,  40], [0,  20,  80], [0,  50, 130],
+    [0,  80, 160], [0, 110, 190], [0, 140, 210],
+    [0, 160, 220], [0, 180, 230], [10,200, 240],
+    [40, 220, 255],
+  ];
+
+  function lerpPal(pal, t) {
+    t = p.constrain(t, 0, 0.9999);
+    let i = Math.floor(t * (pal.length - 1));
+    let f = t * (pal.length - 1) - i;
+    let a = pal[i], b = pal[i+1];
+    return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
+  }
+
+  function petColor(t, calm) {
+    let h = lerpPal(PET_HOT,  t);
+    let c = lerpPal(PET_CALM, t * 0.6);
+    return [h[0]+(c[0]-h[0])*calm, h[1]+(c[1]-h[1])*calm, h[2]+(c[2]-h[2])*calm];
+  }
+
+  // ── State ─────────────────────────────────────────────────
+  let holding     = false;
+  let calmLevel   = 0;
+  let breathPhase = 0;
+  let chestOpen   = 0;
+
+  // ── Nodes ─────────────────────────────────────────────────
+  let nodes = [];
+  const N = 190;
+
+  class Node {
+    constructor(fast) { this.fast = fast || false; this.init(true); }
+
+    init(anywhere) {
+      this.r       = this.fast ? p.random(2, 4.5) : p.random(2.5, 7);
+      this.heat    = p.random(0.1, 1.0);
+      this.noiseT  = p.random(1000);
+      this.pulseT  = p.random(1000);
+      this.axonLen = this.fast ? p.random(25, 55) : p.random(45, 100);
+      this.mode    = p.random() < 0.6 ? 'stream' : 'drift';
+
+      let speedBase = this.fast ? p.random(2.8, 5.5) : p.random(0.4, 1.8);
+
+      if (this.mode === 'stream') {
+        this.dir   = p.random() < 0.5 ? 1 : -1;
+        this.speed = speedBase * this.dir;
+        this.vy    = p.random(-0.2, 0.2) * (this.fast ? 2 : 1);
+      } else {
+        let angle  = p.random(p.TWO_PI);
+        this.vx    = Math.cos(angle) * speedBase * 0.7;
+        this.vy    = Math.sin(angle) * speedBase * 0.7;
+        this.dir   = 1;
+      }
+
+      if (anywhere) {
+        this.x = p.random(p.width);
+        this.y = p.random(p.height * 0.02, p.height * 0.98);
+      } else {
+        if (this.mode === 'drift') {
+          let edge = Math.floor(p.random(4));
+          if (edge===0){ this.x=p.random(p.width); this.y=-10; }
+          else if(edge===1){ this.x=p.width+10; this.y=p.random(p.height); }
+          else if(edge===2){ this.x=p.random(p.width); this.y=p.height+10; }
+          else { this.x=-10; this.y=p.random(p.height); }
+        } else {
+          this.x = this.dir>0 ? -10 : p.width+10;
+          this.y = p.random(p.height*0.02, p.height*0.98);
+        }
+      }
+    }
+
+    update(cx, cy, calm) {
+      this.noiseT += this.fast ? 0.012 : 0.006;
+      this.pulseT += 0.04;
+
+      // fast movers only partially slow on calm
+      let slowFactor = this.fast ? (1 - calm * 0.35) : (1 - calm * 0.75);
+
+      if (this.mode === 'stream') {
+        this.x += (this.speed + (p.noise(this.noiseT)-0.5)*0.8) * slowFactor;
+        this.y += (this.vy    + (p.noise(this.noiseT+300)-0.5)*0.5) * slowFactor;
+      } else {
+        this.vx += (p.noise(this.noiseT)-0.5) * 0.15;
+        this.vy += (p.noise(this.noiseT+400)-0.5) * 0.15;
+        let spd = Math.sqrt(this.vx*this.vx+this.vy*this.vy);
+        let cap = this.fast ? 5 : 1.8;
+        if (spd > cap){ this.vx*=0.88; this.vy*=0.88; }
+        this.x += this.vx * slowFactor;
+        this.y += this.vy * slowFactor;
+      }
+
+      if (calm > 0.05) {
+        this.heat += (0.15 - this.heat) * calm * 0.015;
+      } else {
+        this.heat += (p.noise(this.noiseT+700) - this.heat) * 0.003;
+        this.heat  = p.constrain(this.heat, 0.1, 1.0);
+      }
+
+      let dx=this.x-cx, dy=this.y-cy;
+      let dist=Math.sqrt(dx*dx+dy*dy);
+      let avoid = 58 + chestOpen * 18;
+      if (dist < avoid) {
+        let push=(avoid-dist)/avoid;
+        this.x+=(dx/(dist||1))*push*2.8;
+        this.y+=(dy/(dist||1))*push*2.8;
+      }
+
+      let margin=60;
+      if (this.x>p.width+margin||this.x<-margin||
+          this.y>p.height+margin||this.y<-margin) this.init(false);
+    }
+
+    draw(allNodes, calm) {
+      let [r,g,b] = petColor(this.heat, calm);
+      let pulse   = 0.7 + p.sin(this.pulseT) * 0.25;
+      // fast movers slightly more transparent — they blur past
+      let baseAlpha = this.fast ? 110 : 165;
+      let alpha   = baseAlpha * pulse;
+
+      for (let other of allNodes) {
+        if (other===this) continue;
+        let dx=other.x-this.x, dy=other.y-this.y;
+        let d=Math.sqrt(dx*dx+dy*dy);
+        if (d < this.axonLen) {
+          let str=1-d/this.axonLen;
+          let [or,og,ob]=petColor(other.heat,calm);
+          // fast node axons are fainter — they don't connect as deeply
+          let axAlpha = this.fast ? str*28*pulse : str*55*pulse;
+          p.stroke((r+or)/2,(g+og)/2,(b+ob)/2, axAlpha);
+          p.strokeWeight(this.fast ? 0.3 : 0.4+str*0.7);
+          let mx=(this.x+other.x)/2+(p.noise(this.noiseT+700)-0.5)*16;
+          let my=(this.y+other.y)/2+(p.noise(this.noiseT+800)-0.5)*16;
+          p.noFill();
+          p.beginShape();
+          p.vertex(this.x,this.y);
+          p.quadraticVertex(mx,my,other.x,other.y);
+          p.endShape();
+        }
+      }
+
+      p.noStroke();
+      p.fill(r,g,b, (this.fast?14:20)*pulse);
+      p.ellipse(this.x,this.y,this.r*5,this.r*5);
+      p.fill(r,g,b, (this.fast?40:60)*pulse);
+      p.ellipse(this.x,this.y,this.r*2.6,this.r*2.6);
+      p.fill(r,g,b, alpha);
+      p.ellipse(this.x,this.y,this.r*1.5,this.r*1.5);
+      p.fill(255,255,255, (this.fast?30:50)*pulse);
+      p.ellipse(this.x,this.y,this.r*0.5,this.r*0.5);
+    }
+  }
+
+  // ── Background web ────────────────────────────────────────
+  let bgNodes=[];
+  function buildBg() {
+    bgNodes=[];
+    for(let i=0;i<70;i++){
+      bgNodes.push({
+        x:p.random(p.width), y:p.random(p.height),
+        r:p.random(1.2,3), heat:p.random(0,0.5),
+        noiseT:p.random(1000),
+        vx:(p.random()-0.5)*0.25, vy:(p.random()-0.5)*0.25,
+      });
+    }
+  }
+
+  function drawBg(calm) {
+    for(let nd of bgNodes){
+      nd.noiseT+=0.002;
+      nd.x+=nd.vx*(1-calm*0.6)+(p.noise(nd.noiseT)-0.5)*0.15;
+      nd.y+=nd.vy*(1-calm*0.6)+(p.noise(nd.noiseT+500)-0.5)*0.15;
+      if(nd.x<0)nd.x=p.width; if(nd.x>p.width)nd.x=0;
+      if(nd.y<0)nd.y=p.height; if(nd.y>p.height)nd.y=0;
+      let[r,g,b]=petColor(nd.heat*(1-calm*0.6),calm);
+      let a=8+p.noise(nd.noiseT)*12;
+      for(let other of bgNodes){
+        let dx=other.x-nd.x,dy=other.y-nd.y,d=Math.sqrt(dx*dx+dy*dy);
+        if(d<95){p.stroke(r,g,b,(1-d/95)*9);p.strokeWeight(0.3);p.line(nd.x,nd.y,other.x,other.y);}
+      }
+      p.noStroke();p.fill(r,g,b,a);p.ellipse(nd.x,nd.y,nd.r*2,nd.r*2);
+    }
+  }
+
+  // ── Person — fluid single-stroke silhouette ───────────────
+  // Drawn as one continuous bezier path tracing head → shoulder
+  // → arm → hip → leg → other leg → hip → arm → shoulder → head
+  // Scale factor so chest expands on inhale
+  function drawPerson(cx, cy, sway, chest, calm) {
+    // calm glow
+    if (calm > 0.05) {
+      let gr = 70 + calm*60 + chest*10;
+      for(let rr=gr;rr>10;rr-=12){
+        let a=calm*8*(1-rr/gr);
+        p.noStroke(); p.fill(40,160,255,a);
+        p.ellipse(cx+sway, cy, rr*1.1, rr*1.6);
+      }
+    }
+
+    let bx = cx + sway;
+    // chest expansion affects shoulder width and torso
+    let sw  = 22 + chest * 9;   // shoulder half-width
+    let th  = 38 + chest * 5;   // torso height
+    let hw  = 7;                 // head radius x
+    let hh  = 9;                 // head radius y
+    let nk  = 7;                 // neck height
+    let hip = 14 + chest * 2;   // hip half-width
+    let leg = 44;                // leg length
+    let legW = 7;
+
+    let headY  = cy - th - nk - hh * 2 - leg * 0.5 + 10;
+    let neckY  = headY + hh * 2;
+    let shouldY = neckY + nk;
+    let hipY   = shouldY + th;
+    let footY  = hipY + leg;
+
+    p.noFill();
+    let outlineA = 185 + calm * 50;
+    p.stroke(255, 255, 255, outlineA);
+    p.strokeWeight(1.1 + calm * 0.5);
+
+    // ── head (ellipse) ──
+    p.ellipse(bx, headY + hh, hw, hh);
+
+    // ── single continuous body path ──
+    // start at left shoulder, trace down left side, across feet, up right side
+    p.beginShape();
+    // left shoulder
+    p.vertex(bx - sw, shouldY);
+    // left shoulder curve down to left elbow area (arm implied)
+    p.bezierVertex(
+      bx - sw - 4, shouldY + th * 0.3,
+      bx - sw - 6, shouldY + th * 0.55,
+      bx - sw - 3, shouldY + th * 0.75
+    );
+    // left side to hip
+    p.bezierVertex(
+      bx - sw,     shouldY + th * 0.85,
+      bx - hip,    hipY - 4,
+      bx - hip,    hipY
+    );
+    // left leg outer
+    p.bezierVertex(
+      bx - hip,    hipY + leg * 0.3,
+      bx - hip + 2, hipY + leg * 0.65,
+      bx - hip + 1, footY
+    );
+    // left foot to right foot (gap between legs)
+    p.bezierVertex(
+      bx - hip + legW * 0.3, footY + 3,
+      bx - legW * 0.5,       footY + 3,
+      bx,                    footY + 1
+    );
+    p.bezierVertex(
+      bx + legW * 0.5,       footY + 3,
+      bx + hip - legW * 0.3, footY + 3,
+      bx + hip - 1,          footY
+    );
+    // right leg inner up to hip
+    p.bezierVertex(
+      bx + hip - 2, hipY + leg * 0.65,
+      bx + hip,     hipY + leg * 0.3,
+      bx + hip,     hipY
+    );
+    // right hip up to right shoulder
+    p.bezierVertex(
+      bx + hip,    hipY - 4,
+      bx + sw,     shouldY + th * 0.85,
+      bx + sw + 3, shouldY + th * 0.75
+    );
+    // right arm area up to shoulder
+    p.bezierVertex(
+      bx + sw + 6, shouldY + th * 0.55,
+      bx + sw + 4, shouldY + th * 0.3,
+      bx + sw,     shouldY
+    );
+    // neck top
+    p.bezierVertex(
+      bx + sw * 0.5, shouldY - nk * 0.3,
+      bx + hw,       neckY + nk,
+      bx + hw * 0.5, neckY
+    );
+    p.bezierVertex(
+      bx + hw * 0.3, neckY - 2,
+      bx - hw * 0.3, neckY - 2,
+      bx - hw * 0.5, neckY
+    );
+    // back down to left shoulder
+    p.bezierVertex(
+      bx - hw,       neckY + nk,
+      bx - sw * 0.5, shouldY - nk * 0.3,
+      bx - sw,       shouldY
+    );
+    p.endShape();
+
+    // breathing ripple rings
+    if (chest > 0.25 && calm > 0.1) {
+      let ripA = chest * 28 * calm;
+      p.noFill();
+      p.stroke(255,255,255,ripA);
+      p.strokeWeight(0.5);
+      p.ellipse(bx, cy, sw*3+chest*22, th*1.9+chest*18);
+      p.stroke(255,255,255,ripA*0.45);
+      p.ellipse(bx, cy, sw*4.2+chest*32, th*2.6+chest*26);
+    }
+
+    // internal scan lines — subtle
+    p.stroke(255,255,255, 8 + calm*6);
+    p.strokeWeight(0.35);
+    for(let yy=shouldY; yy<footY; yy+=6){
+      p.line(bx-sw*0.7, yy, bx+sw*0.7, yy);
+    }
+  }
+
+  // ── Setup ─────────────────────────────────────────────────
+  p.setup = function() {
+    let cnv = p.createCanvas(p.windowWidth, p.windowHeight);
+    cnv.parent(document.body);
+    buildBg();
+
+    // ~85% normal, ~15% fast
+    for(let i=0;i<N;i++) nodes.push(new Node(i < Math.floor(N*0.15)));
+
+    cnv.elt.addEventListener('mousedown',  ()=>{ holding=true; });
+    cnv.elt.addEventListener('mouseup',    ()=>{ holding=false; });
+    cnv.elt.addEventListener('touchstart', (e)=>{ e.preventDefault(); holding=true; },{passive:false});
+    cnv.elt.addEventListener('touchend',   ()=>{ holding=false; });
+  };
+
+  p.draw = function() {
+    p.background(2, 2, 6, 255);
+
+    let cx = p.width/2;
+    let cy = p.height/2;
+    let t  = p.frameCount * 0.01;
+
+    if (holding) {
+      calmLevel   += (1 - calmLevel) * 0.018;
+      breathPhase += 0.025;
+    } else {
+      calmLevel   += (0 - calmLevel) * 0.012;
+      breathPhase += 0.008;
+    }
+
+    let rawBreath = (p.sin(breathPhase) + 1) / 2;
+    chestOpen += (rawBreath * calmLevel - chestOpen) * 0.08;
+
+    drawBg(calmLevel);
+
+    for(let nd of nodes) nd.update(cx, cy, calmLevel);
+    for(let nd of nodes) nd.draw(nodes, calmLevel);
+
+    let swayAmt = 1.8 * (1 - calmLevel * 0.7);
+    let sway    = p.sin(t*0.9)*swayAmt + p.sin(t*0.4)*swayAmt*0.4;
+    drawPerson(cx, cy, sway, chestOpen, calmLevel);
+
+    // scanlines
+    p.noStroke();
+    for(let y=0;y<p.height;y+=3){ p.fill(0,0,0,20); p.rect(0,y,p.width,1); }
+
+    // vignette
+    for(let r=p.width*0.95; r>p.width*0.25; r-=16){
+      let a=p.map(r,p.width*0.25,p.width*0.95,10,0);
+      p.noStroke(); p.fill(0,0,0,a);
+      p.ellipse(cx,cy,r,r*(p.height/p.width)*1.3);
+    }
+
+    let hint=document.getElementById('hint');
+    if(hint) hint.style.opacity = p.frameCount>180 ? '0' : '1';
+  };
+
+  p.windowResized = function() {
+    p.resizeCanvas(p.windowWidth, p.windowHeight);
+    buildBg();
+  };
+
+});
+</script>
+</body>
+</html>
