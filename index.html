@@ -32,11 +32,11 @@
 <div id="hint">hold to breathe</div>
 <script>
 new p5(function(p) {
- 
+
   // ── palette ───────────────────────────────────────────────
   var HOT  = [[8,15,90],[0,55,200],[0,130,230],[0,210,210],[0,200,70],[100,220,0],[230,230,0],[255,150,0],[255,60,0],[230,10,10]];
   var CALM = [[2,5,40],[0,20,80],[0,50,130],[0,80,160],[0,110,190],[0,140,210],[0,160,220],[0,180,230],[10,200,240],[40,220,255]];
- 
+
   function lerpPal(pal, t) {
     t = Math.max(0, Math.min(0.9999, t));
     var i = Math.floor(t * (pal.length - 1));
@@ -44,13 +44,13 @@ new p5(function(p) {
     var a = pal[i], b = pal[i+1];
     return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
   }
- 
+
   function petCol(heat, calm) {
     var h = lerpPal(HOT,  heat);
     var c = lerpPal(CALM, heat * 0.6);
     return [h[0]+(c[0]-h[0])*calm, h[1]+(c[1]-h[1])*calm, h[2]+(c[2]-h[2])*calm];
   }
- 
+
   // ── globals ───────────────────────────────────────────────
   var holding     = false;
   var calmLevel   = 0;
@@ -60,11 +60,11 @@ new p5(function(p) {
   var blinkDur    = 12;
   var nextBlink   = 200;
   var eyeOpen     = 1;   // 1=open 0=closed
- 
+
   // ── nodes ─────────────────────────────────────────────────
   var nodes = [];
   var N = 180;
- 
+
   function makeNode(fast, anywhere) {
     var nd = {};
     nd.fast    = fast;
@@ -75,7 +75,7 @@ new p5(function(p) {
     nd.axon    = fast ? p.random(25, 55) : p.random(45, 100);
     nd.stream  = p.random() < 0.6;
     var spd    = fast ? p.random(2.8, 5.2) : p.random(0.4, 1.8);
- 
+
     if (nd.stream) {
       nd.dir   = p.random() < 0.5 ? 1 : -1;
       nd.sx    = spd * nd.dir;
@@ -85,7 +85,7 @@ new p5(function(p) {
       nd.vx    = Math.cos(ang) * spd * 0.7;
       nd.vy    = Math.sin(ang) * spd * 0.7;
     }
- 
+
     if (anywhere) {
       nd.x = p.random(p.width);
       nd.y = p.random(p.height);
@@ -103,12 +103,12 @@ new p5(function(p) {
     }
     return nd;
   }
- 
+
   function updateNode(nd, cx, cy) {
     nd.nt += nd.fast ? 0.012 : 0.006;
     nd.pt += 0.04;
     var sf = nd.fast ? (1 - calmLevel*0.35) : (1 - calmLevel*0.75);
- 
+
     if (nd.stream) {
       nd.x += (nd.sx + (p.noise(nd.nt)     - 0.5) * 0.8) * sf;
       nd.y += (nd.sy + (p.noise(nd.nt+300) - 0.5) * 0.5) * sf;
@@ -121,7 +121,7 @@ new p5(function(p) {
       nd.x += nd.vx * sf;
       nd.y += nd.vy * sf;
     }
- 
+
     // heat shift toward calm blue
     if (calmLevel > 0.05) {
       nd.heat += (0.15 - nd.heat) * calmLevel * 0.015;
@@ -129,7 +129,7 @@ new p5(function(p) {
       nd.heat += (p.noise(nd.nt+700) - nd.heat) * 0.003;
       nd.heat  = Math.max(0.1, Math.min(1.0, nd.heat));
     }
- 
+
     // avoid face zone
     var dx = nd.x - cx, dy = nd.y - cy;
     var dist = Math.sqrt(dx*dx + dy*dy) || 1;
@@ -139,7 +139,7 @@ new p5(function(p) {
       nd.x += (dx/dist) * push * 3;
       nd.y += (dy/dist) * push * 3;
     }
- 
+
     // respawn if off screen
     var m = 60;
     if (nd.x > p.width+m || nd.x < -m || nd.y > p.height+m || nd.y < -m) {
@@ -147,14 +147,14 @@ new p5(function(p) {
       Object.assign(nd, fresh);
     }
   }
- 
+
   function drawNode(nd) {
     var col   = petCol(nd.heat, calmLevel);
     var r=col[0], g=col[1], b=col[2];
     var pulse = 0.7 + Math.sin(nd.pt) * 0.25;
     var ba    = nd.fast ? 110 : 165;
     var alpha = ba * pulse;
- 
+
     // axons
     for (var i=0; i<nodes.length; i++) {
       var other = nodes[i];
@@ -176,14 +176,14 @@ new p5(function(p) {
         p.endShape();
       }
     }
- 
+
     p.noStroke();
     p.fill(r,g,b, (nd.fast?14:20)*pulse); p.ellipse(nd.x,nd.y, nd.r*5, nd.r*5);
     p.fill(r,g,b, (nd.fast?40:60)*pulse); p.ellipse(nd.x,nd.y, nd.r*2.6, nd.r*2.6);
     p.fill(r,g,b, alpha);                 p.ellipse(nd.x,nd.y, nd.r*1.5, nd.r*1.5);
     p.fill(255,255,255, (nd.fast?30:50)*pulse); p.ellipse(nd.x,nd.y, nd.r*0.5, nd.r*0.5);
   }
- 
+
   // ── background web ────────────────────────────────────────
   var bgN = [];
   function buildBg() {
@@ -197,7 +197,7 @@ new p5(function(p) {
       });
     }
   }
- 
+
   function drawBg() {
     for (var i=0; i<bgN.length; i++) {
       var nd = bgN[i];
@@ -216,12 +216,12 @@ new p5(function(p) {
       p.noStroke(); p.fill(col[0],col[1],col[2],a); p.ellipse(nd.x,nd.y,nd.r*2,nd.r*2);
     }
   }
- 
+
   // ── face ──────────────────────────────────────────────────
   function drawFace(cx, cy) {
     var calm = calmLevel;
     var eo   = eyeOpen;
- 
+
     // calm glow
     if (calm > 0.05) {
       var gr = 80 + calm*60 + breathAmt*12;
@@ -231,19 +231,19 @@ new p5(function(p) {
         p.ellipse(cx, cy, rr*1.1, rr*1.55);
       }
     }
- 
+
     // ghost face oval
     p.noFill();
     p.stroke(255,255,255, 14+calm*12);
     p.strokeWeight(0.5);
     p.ellipse(cx, cy, 42+breathAmt*8, 54+breathAmt*10);
- 
+
     // eyes
     var eyeY = cy - 6;
     var eyeX = [cx-11, cx+11];
     var ew   = 10;  // eye width
     var eh   = 5.5 * eo; // eye height scales with openness
- 
+
     // breath ripple
     if (calm > 0.15 && breathAmt > 0.3) {
       var ripA = calm * breathAmt * 24;
@@ -251,17 +251,17 @@ new p5(function(p) {
       p.stroke(255,255,255,ripA);    p.strokeWeight(0.4); p.ellipse(cx,cy,110+breathAmt*24,140+breathAmt*20);
       p.stroke(255,255,255,ripA*0.4);p.strokeWeight(0.3); p.ellipse(cx,cy,160+breathAmt*34,200+breathAmt*28);
     }
- 
+
     for (var e=0; e<2; e++) {
       var ex = eyeX[e];
- 
+
       if (eo < 0.06) {
         // closed — thin line
         p.stroke(255,255,255,60); p.strokeWeight(0.8);
         p.line(ex-ew/2, eyeY, ex+ew/2, eyeY);
         continue;
       }
- 
+
       // upper lid
       p.noFill();
       p.stroke(255,255,255, 115+calm*55);
@@ -272,7 +272,7 @@ new p5(function(p) {
         p.vertex(ex - ew/2 + ew*tt, eyeY - eh*4*tt*(1-tt));
       }
       p.endShape();
- 
+
       // lower lid
       p.stroke(255,255,255, 65+calm*35);
       p.strokeWeight(0.6);
@@ -282,7 +282,7 @@ new p5(function(p) {
         p.vertex(ex - ew/2 + ew*tt, eyeY + eh*2.2*tt*(1-tt));
       }
       p.endShape();
- 
+
       // iris
       if (eo > 0.4) {
         var ia = (eo-0.4)/0.6;
@@ -293,7 +293,7 @@ new p5(function(p) {
         p.ellipse(ex, eyeY - eh*0.15, eh*0.35*eo, eh*0.35*eo);
       }
     }
- 
+
     // nostrils
     if (eo > 0.3) {
       var na = (eo-0.3)/0.7 * (14+calm*8);
@@ -301,7 +301,7 @@ new p5(function(p) {
       p.ellipse(cx-3, cy+9,  2.5, 1.8);
       p.ellipse(cx+3, cy+9,  2.5, 1.8);
     }
- 
+
     // mouth
     p.noFill();
     p.stroke(255,255,255, 9+calm*18+eo*6);
@@ -313,7 +313,7 @@ new p5(function(p) {
     }
     p.endShape();
   }
- 
+
   // ── setup ─────────────────────────────────────────────────
   p.setup = function() {
     var cnv = p.createCanvas(p.windowWidth, p.windowHeight);
@@ -321,20 +321,20 @@ new p5(function(p) {
     buildBg();
     var nFast = Math.floor(N * 0.15);
     for (var i=0; i<N; i++) nodes.push(makeNode(i < nFast, true));
- 
+
     document.addEventListener('mousedown',  function(){ holding=true; });
     document.addEventListener('mouseup',    function(){ holding=false; });
     document.addEventListener('touchstart', function(e){ e.preventDefault(); holding=true; }, {passive:false});
     document.addEventListener('touchend',   function(){ holding=false; });
   };
- 
+
   // ── draw ──────────────────────────────────────────────────
   p.draw = function() {
     p.background(2, 2, 6, 255);
- 
+
     var cx = p.width  / 2;
     var cy = p.height / 2;
- 
+
     // calm + breath
     if (holding) {
       calmLevel   += (1 - calmLevel) * 0.018;
@@ -345,7 +345,7 @@ new p5(function(p) {
     }
     var rawBreath = (Math.sin(breathPhase) + 1) / 2;
     breathAmt += (rawBreath * calmLevel - breathAmt) * 0.08;
- 
+
     // blink
     blinkT++;
     if (blinkT >= nextBlink) {
@@ -359,32 +359,32 @@ new p5(function(p) {
       eyeOpen = 1;
     }
     eyeOpen = eyeOpen * (1 - calmLevel*0.15);
- 
+
     drawBg();
     for (var i=0; i<nodes.length; i++) updateNode(nodes[i], cx, cy);
     for (var i=0; i<nodes.length; i++) drawNode(nodes[i]);
     drawFace(cx, cy);
- 
+
     // scanlines
     p.noStroke();
     for (var y=0; y<p.height; y+=3) { p.fill(0,0,0,20); p.rect(0,y,p.width,1); }
- 
+
     // vignette
     for (var r=p.width*0.95; r>p.width*0.25; r-=16) {
       var a = p.map(r, p.width*0.25, p.width*0.95, 10, 0);
       p.noStroke(); p.fill(0,0,0,a);
       p.ellipse(cx, cy, r, r*(p.height/p.width)*1.3);
     }
- 
+
     var hint = document.getElementById('hint');
     if (hint) hint.style.opacity = p.frameCount > 180 ? '0' : '1';
   };
- 
+
   p.windowResized = function() {
     p.resizeCanvas(p.windowWidth, p.windowHeight);
     buildBg();
   };
- 
+
 });
 </script>
 </body>
